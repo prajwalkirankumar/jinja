@@ -129,7 +129,7 @@ BUILD_VIEW = {"urls": ["http://server.jenkins.couchbase.com/job/build_sanity_mat
               "features": BUILD_FEATURES,
               "bucket": "build"}
 
-VIEWS = [MOBILE_VIEW, SERVER_VIEW, BUILD_VIEW]
+VIEWS = [ SERVER_VIEW]
 BUILDER_URLS = ["http://server.jenkins.couchbase.com/job/couchbase-server-build/",
                 "http://server.jenkins.couchbase.com/job/watson-build/"]
 

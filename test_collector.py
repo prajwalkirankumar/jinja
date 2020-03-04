@@ -10,24 +10,27 @@ import git
 import pydash
 from couchbase.bucket import Bucket, LOCKMODE_WAIT
 from couchbase.n1ql import N1QLQuery
-
-#HOST = '10.111.170.102'
-HOST = '172.23.109.74'
+from constants import *
+# HOST = '10.111.170.102'
+# HOST = '172.23.109.74'
+HOST = '10.112.195.101'
 CLIENT = {}
 testRunnerDir = "/tmp/TestRunner/testrunner"
 testRunnerRepo = "http://github.com/couchbase/testrunner"
 CONF = "conf"
 PYTESTS = "pytests"
 BUCKET = "test1"
-TESTS_RESULT_LIMIT = 50
+TESTS_RESULT_LIMIT = 500
+dict_of_subcomponents = {}
+test_results = {}
 
 class TestCaseDocument(object):
     def __init__(self):
         self.className = ""
         self.testName = ""
         self.priority = ""
-        self.component = ""
-        self.subComponent = ""
+        self.component = []
+        self.subComponent = []
         self.os = {}
         self.confFile = []
         self.changed = False
@@ -48,7 +51,7 @@ class TestCaseCollector:
 
     def create_client(self):
         try:
-            client = Bucket("couchbase://{0}/{1}".format(HOST, BUCKET), lockmode=LOCKMODE_WAIT)
+            client = Bucket("couchbase://{0}/{1}".format(HOST, BUCKET), lockmode=LOCKMODE_WAIT,username='Administrator',password='password')
             CLIENT[BUCKET] = client
         except Exception as e:
             print e
@@ -202,6 +205,7 @@ class TestCaseCollector:
     def get_test_case_id(self, test_result):
         test_case = self.get_test_case_from_test_result(test_result)
         conf_file = test_case['conf_file'] if 'conf_file' in test_case else self.get_conf_from_store(test_case)
+        # conf_file = test_case['conf_file'] if 'conf_file' in test_case else None
         if not conf_file:
             return
         if "conf/" in conf_file:
@@ -231,7 +235,7 @@ class TestCaseCollector:
             os = build_details['os']
             if os not in document['os']:
                 document['os'][os] = []
-            if not document['component']:
+            if not document['component'] or len(document['component'])==0:
                 document['component'] = build_details['component']
             if not document['subComponent'] and 'subComponent' in build_details:
                 document['subComponent'] = build_details['subComponent']
@@ -249,10 +253,13 @@ class TestCaseCollector:
             test['duration'] = test_result['duration']
             test['errorStackTrace'] = test_result['errorStackTrace']
             test['url'] = build_details['url']
+            test['component'] = build_details['component']
+            test['job_name'] = build_details['name']
             """ Trim tests to store only TESTS_RESULT_LIMIT tests results"""
             if len(tests) > TESTS_RESULT_LIMIT - 1:
                 tests = tests[len(tests) - TESTS_RESULT_LIMIT + 1:]
             tests.append(test)
+            document['os'][os] = tests
             client.upsert(test_case_id, document)
         except Exception as e:
             print e
@@ -358,6 +365,11 @@ class TestCaseCollector:
         t.testName = test_case['testName']
         conf = {'conf': conf, 'commented': test_case['commented'], "testLine": test_case['testLine']}
         t.confFile = [conf]
+        try:
+            t.subComponent = dict_of_subcomponents[conf["conf"]]
+            # print(conf["conf"])
+        except Exception as e:
+            t.subComponent = []
         return t
 
     def get_history(self, new_commit, commit_type):
@@ -566,7 +578,32 @@ class TestCaseCollector:
             pydash.remove(conf, lambda x: x['conf'] == _new_conf['conf'])
         conf.extend(new_conf)
 
-        #
+    @staticmethod
+    def pollSubcomponents():
+        from couchbase.n1ql import N1QLQuery
+        from couchbase.bucket import Bucket
+        import json
+        TEST_SUITE_DB = '172.23.105.177'
+        cb = Bucket('couchbase://' + TEST_SUITE_DB + '/QE-Test-Suites')
+
+        for view in VIEWS:
+            queryString = "SELECT distinct component from `QE-Test-Suites` where component is NOT NULL"
+            query = N1QLQuery(queryString)
+            components = list(cb.n1ql_query(queryString))
+
+            for component in components:
+                queryString = "SELECT ENCODE_JSON(ARRAY_AGG(d.subcomponent)) AS subcmps,d.confFile \
+                FROM `QE-Test-Suites` as d \
+                WHERE component='{0}' \
+                GROUP BY d.confFile;".format(component["component"].encode('utf-8'))
+                query = N1QLQuery(queryString)
+                results = list(cb.n1ql_query(queryString))
+
+                for result in results:
+                    dict_of_subcomponents[result["confFile"].encode('utf-8')] = json.loads(result["subcmps"])
+        print(len(dict_of_subcomponents))
+
+
 # if __name__ == "__main__":
 #     test_case_collector = TestCaseCollector()
 #     #create_client()

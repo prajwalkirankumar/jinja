@@ -37,17 +37,17 @@ def createClients():
         if bucket == "build":
             continue
         try:
-            client = Bucket("couchbase://{0}/{1}".format(HOST, bucket), lockmode=LOCKMODE_WAIT)
+            client = Bucket("couchbase://{0}/{1}".format(HOST, bucket), lockmode=LOCKMODE_WAIT,username='Administrator',password='password')
             CLIENTS[bucket] = client
         except Exception:
             print "Error while connecting to {0}/{1}".format(HOST, bucket)
     try:
-        client = Bucket("couchbase://{0}/{1}".format(HOST, "builds"), lockmode=LOCKMODE_WAIT)
+        client = Bucket("couchbase://{0}/{1}".format(HOST, "builds"), lockmode=LOCKMODE_WAIT,username='Administrator',password='password')
         CLIENTS['builds'] = client
     except Exception:
         print "Error while connecting to {0}/{1}".format(HOST, "builds")
     try:
-        client = Bucket("couchbase://{0}/{1}".format(HOST, "QE-Test-Suites"), lockmode=LOCKMODE_WAIT)
+        client = Bucket("couchbase://{0}/{1}".format(HOST, "QE-Test-Suites"), lockmode=LOCKMODE_WAIT,username='Administrator',password='password')
         CLIENTS['testSuites'] = client
     except Exception:
         print "Error while connecting to {0}/{1}".format(HOST, "QE-Test-Suites")
@@ -137,7 +137,11 @@ def store_build_details(build_document, type):
         existing_build['olderBuild'] = True
     get_total_fail_count(doc)
     client = CLIENTS['builds']
-    client.upsert(build, doc)
+    try:
+        client.upsert(build, doc)
+    except:
+        client.upsert(build, doc)
+
 
 def purge_job_details(doc_id, type, disabled=False):
     client = CLIENTS[type]
@@ -219,7 +223,11 @@ def sanitize():
                     for build in jobName[1:]:
                         build['olderBuild'] = True
         get_total_fail_count(document)
-        client.upsert(build_id, document)
+        try:
+            client.upsert(build_id, document)
+        except:
+            client.upsert(build_id, document)
+
 
 def store_test_cases(job_details):
     """
@@ -365,8 +373,8 @@ def getImplementedIn(component, subcomponent):
     client = CLIENTS['testSuites']
     query = "SELECT implementedIn from `QE-Test-Suites` where component = '{0}' and subcomponent = '{1}'".format(component.lower(), subcomponent)
     for row in client.n1ql_query(N1QLQuery(query)):
-	if 'implementedIn' not in row:
-		return ""
+        if 'implementedIn' not in row:
+            return ""
         return row['implementedIn']
     return ""
 
@@ -438,9 +446,10 @@ def purgeDisabled(job, bucket):
             client.remove(oldKey)
         except Exception as ex:
             pass # delete ok
-
+i,j = 0 ,0
 def storeTest(jobDoc, view, first_pass = True, lastTotalCount = -1, claimedBuilds = None):
-
+    global i
+    global j
     bucket = view["bucket"]
 
     claimedBuilds = claimedBuilds or {}
@@ -449,7 +458,6 @@ def storeTest(jobDoc, view, first_pass = True, lastTotalCount = -1, claimedBuild
     doc = jobDoc
     nameOrig = doc["name"]
     url = doc["url"]
-
     if url.find("sdkbuilds.couchbase") > -1:
         url = url.replace("sdkbuilds.couchbase", "sdkbuilds.sc.couchbase")
 
@@ -460,9 +468,12 @@ def storeTest(jobDoc, view, first_pass = True, lastTotalCount = -1, claimedBuild
 
     # do not process disabled jobs
     if isDisabled(doc):
+        print("disabled {0}".format(nameOrig))
+        i = i+1
         purgeDisabled(res, bucket)
         return
-
+    j = j+1
+    print("enabled {0} {1}".format(nameOrig,j))
     # operate as 2nd pass if test_executor
     if isExecutor(doc["name"]):
         first_pass = False
@@ -580,8 +591,9 @@ def storeTest(jobDoc, view, first_pass = True, lastTotalCount = -1, claimedBuild
             if caveat_should_skip_mobile(doc):
                 continue
 
-            #if bucket == "server":
-            #    store_test_cases(doc)
+            if bucket == "server":
+               print("Storing for Bid ",bid)
+               store_test_cases(doc)
             store_build_details(doc, bucket)
 
             histKey = doc["name"]+"-"+doc["build"]
@@ -619,6 +631,7 @@ def storeTest(jobDoc, view, first_pass = True, lastTotalCount = -1, claimedBuild
                 client.upsert(key, doc)
                 buildHist[histKey] = doc["build_id"]
             except:
+                client.upsert(key, doc)
                 print "set failed, couchbase down?: %s"  % (HOST)
 
             if doc.get("claimedBuilds"): # rm custom claim
@@ -724,6 +737,7 @@ def pollBuild(view):
                 else:
                     # each run is a result
                     for doc in j["runs"]:
+                        print(doc)
                         storeBuild(client, doc, name, view)
             except Exception as ex:
                 print ex
@@ -770,6 +784,8 @@ def getOsComponent(name, view):
 
 def pollTest(view):
 
+    TEST_CASE_COLLECTOR.pollSubcomponents()
+
     tJobs = []
 
     for url in view["urls"]:
@@ -786,6 +802,7 @@ def pollTest(view):
                 continue
 
             os, comp = getOsComponent(doc["name"], view)
+
             if not os or not comp:
                 if not isExecutor(job["name"]):
                     # does not match os or comp and is not executor
@@ -798,18 +815,19 @@ def pollTest(view):
             doc["color"] = job.get("color")
 
             name = doc["name"]
-            t = Thread(target=storeTest, args=(doc, view))
-            t.start()
-            tJobs.append(t)
+            storeTest(doc,view)
+            # t = Thread(target=storeTest, args=(doc, view))
+            # t.start()
+            # tJobs.append(t)
+            #
+            # if len(tJobs) > 10:
+            #     # intermediate join
+            #     for t in tJobs:
+            #         t.join()
+            #     tJobs = []
 
-            if len(tJobs) > 10:
-                # intermediate join
-                for t in tJobs:
-                    t.join()
-                tJobs = []
-
-        for t in tJobs:
-            t.join()
+        # for t in tJobs:
+        #     t.join()
 
 
 def convert_changeset_to_old_format(new_doc, timestamp):
@@ -877,7 +895,6 @@ def collectAllBuildInfo():
        except Exception as ex:
            print "exception occurred during build collection: %s" % (ex)
 
-
 if __name__ == "__main__":
     createClients()
     # run build collect info thread
@@ -887,10 +904,11 @@ if __name__ == "__main__":
     #sanitize()
     #get_from_bucket_and_store_build("mobile")
     #get_from_bucket_and_store_build("server")
-    #TEST_CASE_COLLECTOR.create_client()
-    #TEST_CASE_COLLECTOR.store_tests()
-
+    TEST_CASE_COLLECTOR.create_client()
+    # TEST_CASE_COLLECTOR.store_tests()
+    print("DONE")
     while True:
+        # Poll QE-Test-Suites to retrieve all conf file - subcomponent mappings
         try:
             for view in VIEWS:
                 JOBS = {}
