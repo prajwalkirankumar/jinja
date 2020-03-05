@@ -115,7 +115,7 @@ SERVER_VIEW = {"urls" : [ "http://qa.sc.couchbase.com",
                           "http://uberjenkins.sc.couchbase.com:8080/"],
                "platforms": SERVER_PLATFORMS,
                "features": SERVER_FEATURES,
-               "bucket": "server"}
+               "bucket": "server-test"}
 MOBILE_VIEW = {"urls" : ["http://uberjenkins.sc.couchbase.com:8080/"],
                "platforms": MOBILE_PLATFORMS,
                "features": MOBILE_FEATURES,
@@ -127,7 +127,7 @@ SDK_VIEW    = {"urls" : [],
 BUILD_VIEW = {"urls": ["http://server.jenkins.couchbase.com/job/build_sanity_matrix/", "http://cv.jenkins.couchbase.com/view/scheduled-unit-tests/job/unit-simple-test/", "http://server.jenkins.couchbase.com/job/watson-unix/"],
               "platforms": SERVER_PLATFORMS,
               "features": BUILD_FEATURES,
-              "bucket": "build"}
+              "bucket": "build-test"}
 
 VIEWS = [ SERVER_VIEW]
 BUILDER_URLS = ["http://server.jenkins.couchbase.com/job/couchbase-server-build/",

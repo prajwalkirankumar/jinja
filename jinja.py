@@ -815,19 +815,19 @@ def pollTest(view):
             doc["color"] = job.get("color")
 
             name = doc["name"]
-            storeTest(doc,view)
-            # t = Thread(target=storeTest, args=(doc, view))
-            # t.start()
-            # tJobs.append(t)
-            #
-            # if len(tJobs) > 10:
-            #     # intermediate join
-            #     for t in tJobs:
-            #         t.join()
-            #     tJobs = []
+            # storeTest(doc,view)
+            t = Thread(target=storeTest, args=(doc, view))
+            t.start()
+            tJobs.append(t)
 
-        # for t in tJobs:
-        #     t.join()
+            if len(tJobs) > 10:
+                # intermediate join
+                for t in tJobs:
+                    t.join()
+                tJobs = []
+
+        for t in tJobs:
+            t.join()
 
 
 def convert_changeset_to_old_format(new_doc, timestamp):
@@ -905,7 +905,7 @@ if __name__ == "__main__":
     #get_from_bucket_and_store_build("mobile")
     #get_from_bucket_and_store_build("server")
     TEST_CASE_COLLECTOR.create_client()
-    # TEST_CASE_COLLECTOR.store_tests()
+    TEST_CASE_COLLECTOR.store_tests()
     print("DONE")
     while True:
         # Poll QE-Test-Suites to retrieve all conf file - subcomponent mappings

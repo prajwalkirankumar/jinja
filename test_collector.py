@@ -601,6 +601,8 @@ class TestCaseCollector:
 
                 for result in results:
                     dict_of_subcomponents[result["confFile"].encode('utf-8')] = json.loads(result["subcmps"])
+
+        print(dict_of_subcomponents)
         print(len(dict_of_subcomponents))
 
 
