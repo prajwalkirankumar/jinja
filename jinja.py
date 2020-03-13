@@ -65,7 +65,7 @@ def get_build_document(build, type):
             "type": type,
             "os": {}
         }
-        if type=='server':
+        if type=='server-test':
             platform = SERVER_PLATFORMS
             features = SERVER_FEATURES
         elif type == 'mobile':
@@ -254,7 +254,7 @@ def store_test_cases(job_details):
             TEST_CASE_COLLECTOR.store_test_result(case, job_details)
 
 
-def getJS(url, params = None, retry = 5, append_api_json=True):
+def getJS(url, params = None, retry = 0, append_api_json=True):
     res = None
     try:
         if append_api_json:
@@ -485,17 +485,18 @@ def storeTest(jobDoc, view, first_pass = True, lastTotalCount = -1, claimedBuild
 
         if isExecutor(doc["name"]):
             # include more history
-            start = bids[0]-500
+            start = bids[-1]-1500
             if start > 0:
                 bids = range(start, bids[0]+1)
             bids.reverse()
         elif first_pass:
             bids.reverse()  # bottom to top 1st pass
-
+        # bids = [195289]
         for bid in bids:
 
             oldName = JOBS.get(doc["name"]) is not None
             if oldName and bid in JOBS[doc["name"]]:
+                print "Skipping {0} as already stored".format(bid)
                 continue # job already stored
             else:
                 if oldName and first_pass == False:
@@ -504,15 +505,18 @@ def storeTest(jobDoc, view, first_pass = True, lastTotalCount = -1, claimedBuild
             doc["build_id"] = bid
             res = getJS(url+str(bid), {"depth" : 0})
             if res is None:
+                print "Skipping {0} as res is none".format(bid)
                 continue
 
             if "result" not in res:
+                print "Skipping {0} as result not in res is none".format(bid)
                 continue
 
             doc["result"] = res["result"]
             doc["duration"] = res["duration"]
 
             if res["result"] not in ["SUCCESS", "UNSTABLE", "FAILURE", "ABORTED"]:
+                print "Skipping {0} as unknown state".format(bid)
                 continue # unknown result state
 
             actions = res["actions"]
@@ -522,12 +526,20 @@ def storeTest(jobDoc, view, first_pass = True, lastTotalCount = -1, claimedBuild
                 purgeDisabled(job, bucket)
                 return
 
+            if params:
+                runtime_params_str = getAction(params,"name","parameters")
+                if runtime_params_str:
+                    runtime_params = re.split("[,]?([^,=]+)=", runtime_params_str)[1:]
+                    runtime_params = dict(zip(runtime_params[::2], runtime_params[1::2]))
+                    doc["runtime_params"] = runtime_params
+
             totalCount = getAction(actions, "totalCount") or 0
             failCount  = getAction(actions, "failCount") or 0
             skipCount  = getAction(actions, "skipCount") or 0
             doc["claim"] = getClaimReason(actions)
             if totalCount == 0:
                 if lastTotalCount == -1:
+                    print "Skipping {0} as no test ever passed".format(bid)
                     continue # no tests ever passed for this build
                 else:
                     totalCount = lastTotalCount
@@ -575,7 +587,7 @@ def storeTest(jobDoc, view, first_pass = True, lastTotalCount = -1, claimedBuild
                    continue
 
 
-            if bucket == "server":
+            if bucket == "server-test":
                 doc["build"], doc["priority"] = getBuildAndPriority(params)
             else:
                 doc["build"], doc["priority"] = getBuildAndPriority(params, True)
@@ -591,7 +603,7 @@ def storeTest(jobDoc, view, first_pass = True, lastTotalCount = -1, claimedBuild
             if caveat_should_skip_mobile(doc):
                 continue
 
-            if bucket == "server":
+            if bucket == "server-test":
                print("Storing for Bid ",bid)
                store_test_cases(doc)
             store_build_details(doc, bucket)
@@ -720,7 +732,15 @@ def pollBuild(view):
         j = getJS(url, {"depth" : 0})
         if j is None:
             continue
-
+        j = j = {
+              "_class" : "hudson.model.Hudson",
+              "jobs" : [
+                  {
+                      "_class": "hudson.model.FreeStyleProject",
+                      "name": "test_suite_executor",
+                      "url": "http://qa.sc.couchbase.com/job/test_suite_executor/",
+                      "color": "yellow_anime"
+                  }]}
         name = j["name"]
         JOBS[name] = {}
         for job in j["builds"]:
@@ -737,7 +757,6 @@ def pollBuild(view):
                 else:
                     # each run is a result
                     for doc in j["runs"]:
-                        print(doc)
                         storeBuild(client, doc, name, view)
             except Exception as ex:
                 print ex
@@ -766,8 +785,8 @@ def getOsComponent(name, view):
             if os[:1] == name.upper()[:1]:
                 _os = os
 
-#    if _os is None:
-#        print "%s: job name has unrecognized os: %s" %  (view["bucket"], name)
+    if _os is None:
+       print "%s: job name has unrecognized os: %s" %  (view["bucket"], name)
 
     for comp in FEATURES:
         tag, _c = comp.split("-")
@@ -777,8 +796,8 @@ def getOsComponent(name, view):
             _comp = _c
             break
 
-#    if _comp is None:
-#        print "%s: job name has unrecognized component: %s" %  (view["bucket"], name)
+    if _comp is None:
+       print "%s: job name has unrecognized component: %s" %  (view["bucket"], name)
 
     return _os, _comp
 
@@ -791,6 +810,7 @@ def pollTest(view):
     for url in view["urls"]:
 
         j = getJS(url, {"depth" : 0, "tree" :"jobs[name,url,color]"})
+        # j = {"_class":"hudson.model.Hudson","jobs":[{"_class":"hudson.model.FreeStyleProject","name":"test_suite_executor","url":"http://qa.sc.couchbase.com/job/test_suite_executor/","color":"blue"}]}
         if j is None or j.get('jobs') is None:
             continue
 
@@ -807,7 +827,7 @@ def pollTest(view):
                 if not isExecutor(job["name"]):
                     # does not match os or comp and is not executor
                     continue
-
+                print(os,comp)
             JOBS[job["name"]] = []
             doc["os"] = os
             doc["component"] = comp
@@ -815,19 +835,19 @@ def pollTest(view):
             doc["color"] = job.get("color")
 
             name = doc["name"]
-            # storeTest(doc,view)
-            t = Thread(target=storeTest, args=(doc, view))
-            t.start()
-            tJobs.append(t)
-
-            if len(tJobs) > 10:
-                # intermediate join
-                for t in tJobs:
-                    t.join()
-                tJobs = []
-
-        for t in tJobs:
-            t.join()
+            storeTest(doc,view)
+        #     t = Thread(target=storeTest, args=(doc, view))
+        #     t.start()
+        #     tJobs.append(t)
+        #
+        #     if len(tJobs) > 10:
+        #         # intermediate join
+        #         for t in tJobs:
+        #             t.join()
+        #         tJobs = []
+        #
+        # for t in tJobs:
+        #     t.join()
 
 
 def convert_changeset_to_old_format(new_doc, timestamp):

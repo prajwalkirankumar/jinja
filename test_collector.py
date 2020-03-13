@@ -12,8 +12,8 @@ from couchbase.bucket import Bucket, LOCKMODE_WAIT
 from couchbase.n1ql import N1QLQuery
 from constants import *
 # HOST = '10.111.170.102'
-# HOST = '172.23.109.74'
-HOST = '10.112.195.101'
+HOST = '172.23.121.84'
+# HOST = '10.112.195.101'
 CLIENT = {}
 testRunnerDir = "/tmp/TestRunner/testrunner"
 testRunnerRepo = "http://github.com/couchbase/testrunner"
@@ -93,7 +93,9 @@ class TestCaseCollector:
     def get_test_case_from_test_result(self, test_result):
         class_name = test_result["className"]
         test_name = test_result["name"]
-        test_case = dict(item.split(":", 1) if ":" in item else [item, ''] for item in test_name.split(",")[1:])
+        # test_case = dict(item.split(":", 1) if ":" in item else [item, ''] for item in test_name.split(",")[1:])
+        params = re.split("[,]?([^,:\"]+):",test_name)[1:]
+        test_case = dict(zip(params[::2], params[1::2]))
         test_case["testName"] = test_name.split(",")[0]
         test_case["className"] = class_name
         return test_case
@@ -131,9 +133,15 @@ class TestCaseCollector:
         if commented and not self.check_if_test(name):
             return class_name, None
         class_name = ".".join(name.split(",")[0].split('.')[0:-1])
-        test_case = dict(item.split("=", 1) if "=" in item else [item, ''] for item in name.split(",")[1:])
+        # test_case = dict(item.split("=", 1) if "=" in item else [item, ''] for item in name.split(",")[1:])
+        params = re.split("[,]?([^,=]+)=", name)[1:]
+        test_case = dict(zip(params[::2], params[1::2]))
         test_case['testName'] = name.split(",")[0]
-        test_case['testLine'] = name[name.find(class_name) + len(class_name) + 1:]
+        #when class name is empty
+        if(class_name == ""):
+            test_case['testLine'] = name
+        else:
+            test_case['testLine'] = name[name.find(class_name) + len(class_name) + 1:]
         test_case['className'] = class_name
         test_case['commented'] = commented
         return class_name, test_case
@@ -202,13 +210,13 @@ class TestCaseCollector:
                     return entry['conf']
         return None
 
-    def get_test_case_id(self, test_result):
+    def get_test_case_id(self, test_result,build_details):
         test_case = self.get_test_case_from_test_result(test_result)
         conf_file = test_case['conf_file'] if 'conf_file' in test_case else self.get_conf_from_store(test_case)
         # conf_file = test_case['conf_file'] if 'conf_file' in test_case else None
         if not conf_file:
             return
-        if "conf/" in conf_file:
+        if conf_file.startswith("conf/"):
             conf_file = conf_file.replace("conf/", '')
         test_cases = self.get_test_cases_from_conf(conf_file)
         test_cases_clone = pydash.clone_deep(test_cases)
@@ -216,17 +224,21 @@ class TestCaseCollector:
             pydash.unset(x, 'GROUP')
             pydash.unset(x, 'commented')
             pydash.unset(x, 'testLine')
+            #if params are overriden by runtime params remove them and compare
+            for param in build_details["runtime_params"]:
+                pydash.unset(x,param)
         test_cases_dict_without_groups = pydash.for_each(test_cases_clone, remove_group)
         callback = lambda x: set(x.items()).issubset(set(test_case.items()))
         index = pydash.find_index(test_cases_dict_without_groups, callback)
         if index == -1:
+            print(test_case," test didnt get stored has index = -1")
             return None
         name = test_cases[index]
         self.remove_unwanted_fields(name)
         return hashlib.md5(json.dumps(name, sort_keys=True)).hexdigest()
 
     def store_test_result(self, test_result, build_details):
-        test_case_id = self.get_test_case_id(test_result)
+        test_case_id = self.get_test_case_id(test_result,build_details)
         if not test_case_id:
             return
         client = CLIENT[BUCKET]
@@ -236,9 +248,9 @@ class TestCaseCollector:
             if os not in document['os']:
                 document['os'][os] = []
             if not document['component'] or len(document['component'])==0:
-                document['component'] = build_details['component']
-            if not document['subComponent'] and 'subComponent' in build_details:
-                document['subComponent'] = build_details['subComponent']
+                document['component'].append(build_details['component'])
+            if document['subComponent'] == [] and 'subComponent' in build_details and build_details['subComponent'] != "null":
+                document['subComponent'] = document['subComponent'].append(build_details['subComponent'])
             tests = document['os'][os]
             """ Check if already updated, return if true """
             build = build_details['build']
@@ -260,18 +272,32 @@ class TestCaseCollector:
                 tests = tests[len(tests) - TESTS_RESULT_LIMIT + 1:]
             tests.append(test)
             document['os'][os] = tests
-            client.upsert(test_case_id, document)
+            self.upsert_util(test_case_id, document,client)
         except Exception as e:
             print e
 
+    def upsert_util(self,key,value,client,retry = 5):
+        try:
+            client.upsert(key,value)
+        except Exception as e:
+            if retry:
+                retry = retry - 1
+                self.upsert_util(key,value,client,retry)
+            else:
+                print("couldnt store {0} and {1}".format(key,value))
+                print e
+
     def store_tests(self):
-        for root, sub_dirs, files in os.walk(os.path.join(testRunnerDir, "conf")):
+        self.pollSubcomponents()
+        for root, sub_dirs, files in os.walk(os.path.join(testRunnerDir, "conf/fts")):
             for confFile in files:
                 if ".conf" not in confFile:
                     continue
+                confFile = "py-fts-geo.conf"
                 file_path = os.path.join(root, confFile)
                 conf_file = file_path[file_path.find("conf/") + len("conf/"):]
                 file_history = list(self.testRunnerRepo.iter_commits(paths=file_path))
+                print(conf_file,os.path.exists(os.path.join(testRunnerDir,CONF,conf_file)))
                 # Store the first commit
                 first_commit = file_history[-1]
                 parent_commit = first_commit.parents[0]
@@ -366,10 +392,17 @@ class TestCaseCollector:
         conf = {'conf': conf, 'commented': test_case['commented'], "testLine": test_case['testLine']}
         t.confFile = [conf]
         try:
-            t.subComponent = dict_of_subcomponents[conf["conf"]]
-            # print(conf["conf"])
+            if conf["conf"] in dict_of_subcomponents.keys():
+                t.subComponent = dict_of_subcomponents[conf["conf"]]
+            elif "conf/"+conf["conf"] in dict_of_subcomponents.keys():
+                t.subComponent = dict_of_subcomponents["conf/"+conf["conf"]]
+            elif "conf"+conf["conf"] in dict_of_subcomponents.keys():
+                t.subComponent = dict_of_subcomponents["conf"+conf["conf"]]
+            else:
+                raise Exception
         except Exception as e:
             t.subComponent = []
+            print e
         return t
 
     def get_history(self, new_commit, commit_type):
@@ -396,9 +429,10 @@ class TestCaseCollector:
             new_conf = pydash.clone_deep(to_upsert['confFile'])
             pydash.merge_with(to_upsert, existing_document, TestCaseCollector._merge_dict)
             TestCaseCollector._flatten_conf(to_upsert['confFile'], new_conf)
-            client.upsert(document_key, to_upsert)
+            self.upsert_util(document_key, to_upsert,client)
         except Exception as e:
             print e
+
 
     def remove_unwanted_fields(self, test_case):
         pydash.unset(test_case, "testLine")
@@ -423,7 +457,10 @@ class TestCaseCollector:
             new_conf = pydash.clone_deep(to_upsert['confFile'])
             pydash.merge_with(to_upsert, existing_document, TestCaseCollector._merge_dict)
             TestCaseCollector._flatten_conf(to_upsert['confFile'], new_conf)
-        client.upsert(document_key, to_upsert)
+        try:
+            self.upsert_util(document_key, to_upsert,client)
+        except Exception as e:
+            print e
 
     def update_changed_test_case(self, test_case, new_commit, conf):
         old_test_case = test_case['old_test_line']
@@ -448,7 +485,7 @@ class TestCaseCollector:
             new_conf = pydash.clone_deep(to_upsert['confFile'])
             pydash.merge_with(to_upsert, old_document, TestCaseCollector._merge_dict)
             TestCaseCollector._flatten_conf(to_upsert['confFile'], new_conf)
-            client.upsert(old_document_key, to_upsert)
+            self.upsert_util(old_document_key, to_upsert,client)
         else:
             old_t.change_history = [history]
             new_t.change_history = [history]
@@ -471,8 +508,8 @@ class TestCaseCollector:
             new_conf = pydash.clone_deep(new_to_upsert['confFile'])
             new_to_upsert = pydash.merge_with(new_to_upsert, old_document, TestCaseCollector._merge_dict)
             TestCaseCollector._flatten_conf(new_to_upsert['confFile'], new_conf)
-            client.upsert(old_document_key, old_to_upsert)
-            client.upsert(new_document_key, new_to_upsert)
+            self.upsert_util(old_document_key, old_to_upsert,client)
+            self.upsert_util(new_document_key, new_to_upsert,client)
 
 
     @staticmethod
@@ -602,8 +639,8 @@ class TestCaseCollector:
                 for result in results:
                     dict_of_subcomponents[result["confFile"].encode('utf-8')] = json.loads(result["subcmps"])
 
-        print(dict_of_subcomponents)
-        print(len(dict_of_subcomponents))
+
+
 
 
 # if __name__ == "__main__":

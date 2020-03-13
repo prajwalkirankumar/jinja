@@ -127,7 +127,7 @@ SDK_VIEW    = {"urls" : [],
 BUILD_VIEW = {"urls": ["http://server.jenkins.couchbase.com/job/build_sanity_matrix/", "http://cv.jenkins.couchbase.com/view/scheduled-unit-tests/job/unit-simple-test/", "http://server.jenkins.couchbase.com/job/watson-unix/"],
               "platforms": SERVER_PLATFORMS,
               "features": BUILD_FEATURES,
-              "bucket": "build-test"}
+              "bucket": "build"}
 
 VIEWS = [ SERVER_VIEW]
 BUILDER_URLS = ["http://server.jenkins.couchbase.com/job/couchbase-server-build/",
