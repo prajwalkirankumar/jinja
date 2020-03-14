@@ -15,7 +15,7 @@ from constants import *
 HOST = '172.23.121.84'
 # HOST = '10.112.195.101'
 CLIENT = {}
-testRunnerDir = "/tmp/TestRunner/testrunner"
+testRunnerDir = "/tmp/TestRunner_Prajwal/testrunner"
 testRunnerRepo = "http://github.com/couchbase/testrunner"
 CONF = "conf"
 PYTESTS = "pytests"
@@ -94,7 +94,8 @@ class TestCaseCollector:
         class_name = test_result["className"]
         test_name = test_result["name"]
         # test_case = dict(item.split(":", 1) if ":" in item else [item, ''] for item in test_name.split(",")[1:])
-        params = re.split("[,]?([^,:\"]+):",test_name)[1:]
+        # params = re.split("[,]?([^,:\"]+):",test_name)[1:]
+        params = re.split("[,]([^,:\"]+):",test_name)[1:]
         test_case = dict(zip(params[::2], params[1::2]))
         test_case["testName"] = test_name.split(",")[0]
         test_case["className"] = class_name
@@ -134,7 +135,7 @@ class TestCaseCollector:
             return class_name, None
         class_name = ".".join(name.split(",")[0].split('.')[0:-1])
         # test_case = dict(item.split("=", 1) if "=" in item else [item, ''] for item in name.split(",")[1:])
-        params = re.split("[,]?([^,=]+)=", name)[1:]
+        params = re.split("[,]([^,=]+)=", name)[1:]
         test_case = dict(zip(params[::2], params[1::2]))
         test_case['testName'] = name.split(",")[0]
         #when class name is empty
@@ -217,7 +218,7 @@ class TestCaseCollector:
         if not conf_file:
             return
         if conf_file.startswith("conf/"):
-            conf_file = conf_file.replace("conf/", '')
+            conf_file = conf_file.replace("conf/", '',1)
         test_cases = self.get_test_cases_from_conf(conf_file)
         test_cases_clone = pydash.clone_deep(test_cases)
         def remove_group(x):
@@ -278,6 +279,7 @@ class TestCaseCollector:
             document['os'][os] = tests
             self.upsert_util(test_case_id, document,client)
         except Exception as e:
+            print test_result
             print e
 
     def upsert_util(self,key,value,client,retry = 5):

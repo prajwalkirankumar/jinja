@@ -491,7 +491,7 @@ def storeTest(jobDoc, view, first_pass = True, lastTotalCount = -1, claimedBuild
             bids.reverse()
         elif first_pass:
             bids.reverse()  # bottom to top 1st pass
-        # bids = [195289]
+        # bids = [195724]
         for bid in bids:
 
             oldName = JOBS.get(doc["name"]) is not None
@@ -939,4 +939,4 @@ if __name__ == "__main__":
             store_existing_jobs()
         except Exception as ex:
             print "exception occurred during job collection: %s" % (ex)
-        time.sleep(120)
+        # time.sleep(120)
