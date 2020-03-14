@@ -925,7 +925,7 @@ if __name__ == "__main__":
     #get_from_bucket_and_store_build("mobile")
     #get_from_bucket_and_store_build("server")
     TEST_CASE_COLLECTOR.create_client()
-    TEST_CASE_COLLECTOR.store_tests()
+    # TEST_CASE_COLLECTOR.store_tests()
     print("DONE")
     while True:
         # Poll QE-Test-Suites to retrieve all conf file - subcomponent mappings

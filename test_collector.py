@@ -225,8 +225,12 @@ class TestCaseCollector:
             pydash.unset(x, 'commented')
             pydash.unset(x, 'testLine')
             #if params are overriden by runtime params remove them and compare
-            for param in build_details["runtime_params"]:
-                pydash.unset(x,param)
+            try:
+                for param in build_details["runtime_params"]:
+                    pydash.unset(x,param)
+            except Exception as e:
+                print("No runtime params in build details")
+                print e
         test_cases_dict_without_groups = pydash.for_each(test_cases_clone, remove_group)
         callback = lambda x: set(x.items()).issubset(set(test_case.items()))
         index = pydash.find_index(test_cases_dict_without_groups, callback)
