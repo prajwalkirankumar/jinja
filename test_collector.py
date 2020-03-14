@@ -293,11 +293,10 @@ class TestCaseCollector:
 
     def store_tests(self):
         self.pollSubcomponents()
-        for root, sub_dirs, files in os.walk(os.path.join(testRunnerDir, "conf/fts")):
+        for root, sub_dirs, files in os.walk(os.path.join(testRunnerDir, "conf/")):
             for confFile in files:
                 if ".conf" not in confFile:
                     continue
-                confFile = "py-fts-geo.conf"
                 file_path = os.path.join(root, confFile)
                 conf_file = file_path[file_path.find("conf/") + len("conf/"):]
                 file_history = list(self.testRunnerRepo.iter_commits(paths=file_path))
