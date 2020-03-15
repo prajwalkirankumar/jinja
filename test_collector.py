@@ -133,7 +133,8 @@ class TestCaseCollector:
             name = class_name + "." + name
         if commented and not self.check_if_test(name):
             return class_name, None
-        class_name = ".".join(name.split(",")[0].split('.')[0:-1])
+        if len(name)!=0:
+            class_name = ".".join(name.split(",")[0].split('.')[0:-1])
         # test_case = dict(item.split("=", 1) if "=" in item else [item, ''] for item in name.split(",")[1:])
         params = re.split("[,]([^,=]+)=", name)[1:]
         test_case = dict(zip(params[::2], params[1::2]))
@@ -185,7 +186,8 @@ class TestCaseCollector:
                 name = class_name + "." + name
             if commented and not self.check_if_test(name):
                 continue
-            class_name = ".".join(name.split(",")[0].split('.')[0:-1])
+            if len(name)!=0:
+                class_name = ".".join(name.split(",")[0].split('.')[0:-1])
             if commented:
                 name = "#{}".format(name)
             if name:
@@ -295,10 +297,11 @@ class TestCaseCollector:
 
     def store_tests(self):
         self.pollSubcomponents()
-        for root, sub_dirs, files in os.walk(os.path.join(testRunnerDir, "conf/")):
+        for root, sub_dirs, files in os.walk(os.path.join(testRunnerDir, "conf/os-certify/")):
             for confFile in files:
                 if ".conf" not in confFile:
                     continue
+                # confFile = "fts-extended-sanity.conf"
                 file_path = os.path.join(root, confFile)
                 conf_file = file_path[file_path.find("conf/") + len("conf/"):]
                 file_history = list(self.testRunnerRepo.iter_commits(paths=file_path))
@@ -464,6 +467,7 @@ class TestCaseCollector:
             TestCaseCollector._flatten_conf(to_upsert['confFile'], new_conf)
         try:
             self.upsert_util(document_key, to_upsert,client)
+            print("New test case inserted {0} {1}".format(document_key,to_upsert))
         except Exception as e:
             print e
 

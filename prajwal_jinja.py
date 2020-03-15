@@ -491,7 +491,7 @@ def storeTest(jobDoc, view, first_pass = True, lastTotalCount = -1, claimedBuild
             bids.reverse()
         elif first_pass:
             bids.reverse()  # bottom to top 1st pass
-        # bids = [195724]
+        # bids = [195922]
         for bid in bids:
 
             oldName = JOBS.get(doc["name"]) is not None
@@ -732,15 +732,15 @@ def pollBuild(view):
         j = getJS(url, {"depth" : 0})
         if j is None:
             continue
-        j = j = {
-              "_class" : "hudson.model.Hudson",
-              "jobs" : [
-                  {
-                      "_class": "hudson.model.FreeStyleProject",
-                      "name": "test_suite_executor",
-                      "url": "http://qa.sc.couchbase.com/job/test_suite_executor/",
-                      "color": "yellow_anime"
-                  }]}
+        # j = j = {
+        #       "_class" : "hudson.model.Hudson",
+        #       "jobs" : [
+        #           {
+        #               "_class": "hudson.model.FreeStyleProject",
+        #               "name": "test_suite_executor",
+        #               "url": "http://qa.sc.couchbase.com/job/test_suite_executor/",
+        #               "color": "yellow_anime"
+        #           }]}
         name = j["name"]
         JOBS[name] = {}
         for job in j["builds"]:
@@ -925,10 +925,9 @@ if __name__ == "__main__":
     #get_from_bucket_and_store_build("mobile")
     #get_from_bucket_and_store_build("server")
     TEST_CASE_COLLECTOR.create_client()
-    # TEST_CASE_COLLECTOR.store_tests()
+    TEST_CASE_COLLECTOR.store_tests()
     print("DONE")
     while True:
-        # Poll QE-Test-Suites to retrieve all conf file - subcomponent mappings
         try:
             for view in VIEWS:
                 JOBS = {}
